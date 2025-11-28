@@ -30,12 +30,13 @@ class Particle:
         self.type = particle_type
         
         if particle_type == "fog":
-            self.size = random.randint(80, 200)
-            self.alpha = random.randint(5, 25)
-            self.speed_x = random.uniform(-0.3, 0.3)
-            self.speed_y = random.uniform(-0.2, 0.1)
-            self.color = (150, 150, 170)
-            self.life = random.randint(200, 400)
+            # Particules style écran de chargement mais en gris - petites et élégantes
+            self.size = random.randint(2, 6)
+            self.alpha = random.randint(80, 180)
+            self.speed_x = random.uniform(-0.8, 0.8)
+            self.speed_y = random.uniform(-1.5, -0.3)
+            self.color = (random.randint(120, 180), random.randint(120, 180), random.randint(130, 190))
+            self.life = random.randint(80, 180)
         elif particle_type == "dust":
             self.size = random.randint(2, 5)
             self.alpha = random.randint(30, 80)
@@ -57,8 +58,26 @@ class Particle:
             self.speed_y = random.uniform(0.5, 2)
             self.color = (139, 0, 0)
             self.life = random.randint(80, 150)
+        elif particle_type == "sparkle":
+            # Petites étincelles grises scintillantes
+            self.size = random.randint(1, 3)
+            self.alpha = random.randint(150, 255)
+            self.speed_x = random.uniform(-0.3, 0.3)
+            self.speed_y = random.uniform(-0.8, -0.2)
+            self.color = (random.randint(180, 220), random.randint(180, 220), random.randint(190, 230))
+            self.life = random.randint(40, 100)
+            self.twinkle = random.random() * math.pi * 2  # Pour effet scintillant
+        elif particle_type == "ambient":
+            # Particules d'ambiance flottantes très légères
+            self.size = random.randint(1, 2)
+            self.alpha = random.randint(40, 100)
+            self.speed_x = random.uniform(-0.2, 0.2)
+            self.speed_y = random.uniform(-0.5, 0.5)
+            self.color = (random.randint(100, 150), random.randint(100, 150), random.randint(110, 160))
+            self.life = random.randint(150, 300)
             
         self.max_life = self.life
+        self.twinkle = getattr(self, 'twinkle', 0)
         
     def update(self):
         self.x += self.speed_x
@@ -69,16 +88,37 @@ class Particle:
         life_ratio = self.life / self.max_life
         self.current_alpha = int(self.alpha * life_ratio)
         
+        # Effet scintillant pour les sparkles
+        if self.type == "sparkle":
+            self.twinkle += 0.3
+            twinkle_factor = (math.sin(self.twinkle) + 1) / 2
+            self.current_alpha = int(self.current_alpha * (0.5 + twinkle_factor * 0.5))
+        
     def draw(self, surface):
         if self.life > 0 and self.current_alpha > 0:
             particle_surface = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
             
             if self.type == "fog":
-                # Brume avec dégradé circulaire
-                for i in range(self.size, 0, -2):
-                    alpha = int((self.current_alpha * i) / self.size)
-                    pygame.draw.circle(particle_surface, (*self.color, alpha), 
-                                     (self.size, self.size), i)
+                # Particules élégantes avec lueur douce
+                pygame.draw.circle(particle_surface, (*self.color, self.current_alpha), 
+                                 (self.size, self.size), self.size)
+                # Ajouter une lueur externe subtile
+                if self.size > 3:
+                    glow_alpha = max(0, self.current_alpha // 3)
+                    pygame.draw.circle(particle_surface, (*self.color, glow_alpha), 
+                                     (self.size, self.size), self.size + 2)
+            elif self.type == "sparkle":
+                # Étoile scintillante avec rayons
+                center = self.size
+                pygame.draw.circle(particle_surface, (*self.color, self.current_alpha), 
+                                 (center, center), self.size)
+                # Petits rayons croisés pour effet étoilé
+                ray_alpha = max(0, self.current_alpha // 2)
+                ray_length = self.size + 2
+                pygame.draw.line(particle_surface, (*self.color, ray_alpha), 
+                               (center - ray_length, center), (center + ray_length, center), 1)
+                pygame.draw.line(particle_surface, (*self.color, ray_alpha), 
+                               (center, center - ray_length), (center, center + ray_length), 1)
             else:
                 pygame.draw.circle(particle_surface, (*self.color, self.current_alpha), 
                                  (self.size, self.size), self.size)
@@ -411,17 +451,8 @@ def interface():
     # Initialisation du mixeur audio
     pygame.mixer.init()
 
-    # Chargement du curseur personnalisé
-    try:
-        custom_cursor = pygame.image.load("sources/data/image/lampe1.png")
-        custom_cursor = pygame.transform.scale(custom_cursor, (80, 80))
-    except:
-        # Créer un curseur de secours si l'image n'existe pas
-        custom_cursor = pygame.Surface((40, 40), pygame.SRCALPHA)
-        pygame.draw.circle(custom_cursor, (255, 200, 100, 200), (20, 20), 15)
-        pygame.draw.circle(custom_cursor, (255, 255, 200, 255), (20, 20), 8)
-
-    pygame.mouse.set_visible(False)
+    # Curseur de souris normal (visible par défaut)
+    pygame.mouse.set_visible(True)
 
     # ═══════════════════════════════════════════════════════════════════════════
     #                              CHARGEMENT RESSOURCES
@@ -474,12 +505,7 @@ def interface():
     vignette = VisualEffects.create_vignette(largeur_ecran, hauteur_ecran, 150)
     scanlines = VisualEffects.create_scanlines(largeur_ecran, hauteur_ecran, 3, 20)
     
-    # Masque de lampe torche amélioré
-    mask_size = 800
-    mask_surface = pygame.Surface((mask_size, mask_size), pygame.SRCALPHA)
-    for i in range(mask_size // 2, 0, -1):
-        alpha = int(255 * (1 - (i / (mask_size // 2))) ** 1.5)
-        pygame.draw.circle(mask_surface, (0, 0, 0, alpha), (mask_size // 2, mask_size // 2), i)
+    # Masque de lampe torche désactivé - plus d'effet d'éclairage autour de la souris
 
     # ═══════════════════════════════════════════════════════════════════════════
     #                              FONCTIONS UTILITAIRES
@@ -697,9 +723,9 @@ def interface():
             screen.blit(vignette, (0, 0))
             screen.blit(scanlines, (0, 0))
             
-            # Curseur
-            mouse_x, mouse_y = pygame.mouse.get_pos()
-            screen.blit(custom_cursor, (mouse_x, mouse_y))
+            # Curseur système standard (pas de curseur personnalisé)
+            # Curseur système standard (pas de curseur personnalisé)
+            # Curseur système standard (pas de curseur personnalisé)
             
             pygame.display.flip()
             
@@ -742,9 +768,13 @@ def interface():
             mouse_pos = pygame.mouse.get_pos()
             mouse_pressed = pygame.mouse.get_pressed()
             
-            # Particules d'ambiance
-            if random.random() < 0.05:
+            # Particules d'ambiance variées
+            if random.random() < 0.1:
                 options_particles.emit_random("fog", 1)
+            if random.random() < 0.05:
+                options_particles.emit_random("sparkle", 1)
+            if random.random() < 0.03:
+                options_particles.emit_random("ambient", 1)
             options_particles.update()
             
             # Dessin
@@ -796,8 +826,8 @@ def interface():
             screen.blit(vignette, (0, 0))
             screen.blit(scanlines, (0, 0))
             
-            # Curseur
-            screen.blit(custom_cursor, (mouse_pos[0], mouse_pos[1]))
+            # Curseur système standard (pas de curseur personnalisé)
+            # Curseur système standard (pas de curseur personnalisé)
             
             pygame.display.flip()
             
@@ -833,11 +863,15 @@ def interface():
             dt = clock.tick(60) / 1000
             mouse_pos = pygame.mouse.get_pos()
             
-            # Particules
-            if random.random() < 0.03:
+            # Particules variées et élégantes
+            if random.random() < 0.08:
                 credits_particles.emit_random("fog", 1)
-            if random.random() < 0.02:
+            if random.random() < 0.01:
                 credits_particles.emit(random.randint(0, largeur_ecran), 0, "blood", 1)
+            if random.random() < 0.06:
+                credits_particles.emit_random("sparkle", 1)
+            if random.random() < 0.04:
+                credits_particles.emit_random("ambient", 1)
             credits_particles.update()
             
             # Dessin
@@ -897,8 +931,8 @@ def interface():
             screen.blit(vignette, (0, 0))
             screen.blit(scanlines, (0, 0))
             
-            # Curseur
-            screen.blit(custom_cursor, (mouse_pos[0], mouse_pos[1]))
+            # Curseur système standard (pas de curseur personnalisé)
+            # Curseur système standard (pas de curseur personnalisé)
             
             pygame.display.flip()
             
@@ -937,9 +971,13 @@ def interface():
         menu_particles = ParticleSystem(largeur_ecran, hauteur_ecran)
         clock = pygame.time.Clock()
         
-        # Initialiser avec quelques particules de brume
-        for _ in range(20):
+        # Initialiser avec des particules variées pour un effet plus riche
+        for _ in range(30):
             menu_particles.emit_random("fog", 1)
+        for _ in range(15):
+            menu_particles.emit_random("ambient", 1)
+        for _ in range(5):
+            menu_particles.emit_random("sparkle", 1)
         
         # play_music()
         running = True
@@ -949,26 +987,24 @@ def interface():
             dt = clock.tick(60) / 1000
             mouse_pos = pygame.mouse.get_pos()
             
-            # Émettre des particules
-            if random.random() < 0.1:
+            # Émettre des particules variées pour un effet plus dynamique et détaillé
+            if random.random() < 0.15:
                 menu_particles.emit_random("fog", 1)
-            if random.random() < 0.02:
+            if random.random() < 0.03:
                 menu_particles.emit_random("dust", 1)
+            if random.random() < 0.08:
+                menu_particles.emit_random("sparkle", 1)
+            if random.random() < 0.05:
+                menu_particles.emit_random("ambient", 1)
             
             menu_particles.update()
             
             # Dessin du fond
             screen.blit(bg_image, (0, 0))
             
-            # Overlay sombre avec effet de lampe torche
+            # Overlay sombre léger sans effet de lampe torche
             overlay_surface = pygame.Surface((largeur_ecran, hauteur_ecran), pygame.SRCALPHA)
-            overlay_surface.blit(bg_dark, (0, 0))
-            
-            # Effet lampe torche (révèle le fond sous le curseur)
-            mask_x = mouse_pos[0] - mask_size // 2
-            mask_y = mouse_pos[1] - mask_size // 2
-            overlay_surface.blit(mask_surface, (mask_x, mask_y), special_flags=pygame.BLEND_RGBA_SUB)
-            
+            overlay_surface.fill((0, 0, 0, 100))  # Overlay sombre subtil
             screen.blit(overlay_surface, (0, 0))
             
             # Particules
@@ -995,32 +1031,54 @@ def interface():
                 button.update(mouse_pos)
                 button.draw(screen)
             
-            # Indicateurs décoratifs (coins)
+            # Indicateurs décoratifs (coins) avec animation subtile
             corner_size = 30
-            corner_color = (80, 20, 20)
-            # Coin supérieur gauche
+            corner_pulse = math.sin(current_time * 1.5) * 0.3 + 0.7
+            corner_color = (int(80 * corner_pulse), int(20 * corner_pulse), int(20 * corner_pulse))
+            corner_glow = (int(120 * corner_pulse), int(40 * corner_pulse), int(40 * corner_pulse))
+            
+            # Coin supérieur gauche avec effet de lueur
+            pygame.draw.line(screen, corner_glow, (18, 18), (18, 18 + corner_size + 2), 4)
+            pygame.draw.line(screen, corner_glow, (18, 18), (18 + corner_size + 2, 18), 4)
             pygame.draw.line(screen, corner_color, (20, 20), (20, 20 + corner_size), 2)
             pygame.draw.line(screen, corner_color, (20, 20), (20 + corner_size, 20), 2)
+            
             # Coin supérieur droit
+            pygame.draw.line(screen, corner_glow, (largeur_ecran - 18, 18), (largeur_ecran - 18, 18 + corner_size + 2), 4)
+            pygame.draw.line(screen, corner_glow, (largeur_ecran - 18, 18), (largeur_ecran - 18 - corner_size - 2, 18), 4)
             pygame.draw.line(screen, corner_color, (largeur_ecran - 20, 20), (largeur_ecran - 20, 20 + corner_size), 2)
             pygame.draw.line(screen, corner_color, (largeur_ecran - 20, 20), (largeur_ecran - 20 - corner_size, 20), 2)
+            
             # Coin inférieur gauche
+            pygame.draw.line(screen, corner_glow, (18, hauteur_ecran - 18), (18, hauteur_ecran - 18 - corner_size - 2), 4)
+            pygame.draw.line(screen, corner_glow, (18, hauteur_ecran - 18), (18 + corner_size + 2, hauteur_ecran - 18), 4)
             pygame.draw.line(screen, corner_color, (20, hauteur_ecran - 20), (20, hauteur_ecran - 20 - corner_size), 2)
             pygame.draw.line(screen, corner_color, (20, hauteur_ecran - 20), (20 + corner_size, hauteur_ecran - 20), 2)
+            
             # Coin inférieur droit
+            pygame.draw.line(screen, corner_glow, (largeur_ecran - 18, hauteur_ecran - 18), (largeur_ecran - 18, hauteur_ecran - 18 - corner_size - 2), 4)
+            pygame.draw.line(screen, corner_glow, (largeur_ecran - 18, hauteur_ecran - 18), (largeur_ecran - 18 - corner_size - 2, hauteur_ecran - 18), 4)
             pygame.draw.line(screen, corner_color, (largeur_ecran - 20, hauteur_ecran - 20), (largeur_ecran - 20, hauteur_ecran - 20 - corner_size), 2)
             pygame.draw.line(screen, corner_color, (largeur_ecran - 20, hauteur_ecran - 20), (largeur_ecran - 20 - corner_size, hauteur_ecran - 20), 2)
             
-            # Version
-            version_text = small_font.render("v1.0", True, (60, 60, 60))
+            # Lignes décoratives horizontales subtiles
+            line_alpha = int(40 + math.sin(current_time * 2) * 20)
+            line_surface = pygame.Surface((largeur_ecran, 2), pygame.SRCALPHA)
+            line_surface.fill((80, 30, 30, line_alpha))
+            screen.blit(line_surface, (0, 60))
+            screen.blit(line_surface, (0, hauteur_ecran - 60))
+            
+            # Version avec style amélioré
+            version_text = small_font.render("v1.0", True, (80, 80, 80))
+            version_glow = small_font.render("v1.0", True, (40, 40, 40))
+            screen.blit(version_glow, (largeur_ecran - 79, hauteur_ecran - 39))
             screen.blit(version_text, (largeur_ecran - 80, hauteur_ecran - 40))
             
             # Effets finaux
             screen.blit(vignette, (0, 0))
             screen.blit(scanlines, (0, 0))
             
-            # Curseur personnalisé
-            screen.blit(custom_cursor, (mouse_pos[0], mouse_pos[1]))
+            # Curseur système standard (pas de curseur personnalisé)
             
             pygame.display.flip()
             
